@@ -1,71 +1,85 @@
-import smtplib
+# notification_manager.py
+
 import os
+import smtplib
 from twilio.rest import Client
+from twilio.base.exceptions import TwilioRestException
 
-
-# Using a .env file to retrieve the phone numbers and tokens.
+# Load credentials from environment variables
+TWILIO_SID = os.environ['TWILIO_SID']
+TWILIO_AUTH_TOKEN = os.environ["TWILIO_AUTH_TOKEN"]
+TWILIO_VIRTUAL_NUMBER = os.environ["TWILIO_VIRTUAL_NUMBER"]
+TWILIO_VERIFIED_NUMBER = os.environ["TWILIO_VERIFIED_NUMBER"]
+TWILIO_WHATSAPP_NUMBER = os.environ["TWILIO_WHATSAPP_NUMBER"]
+SMTP_ADDRESS = os.environ["EMAIL_PROVIDER_SMTP_ADDRESS"]
+MY_EMAIL = os.environ["MY_EMAIL"]
+MY_EMAIL_PASSWORD = os.environ["MY_EMAIL_PASSWORD"]
 
 class NotificationManager:
-
+    """
+    This class is responsible for sending notifications with the deal flight details.
+    """
     def __init__(self):
-        # Retrieve environment variables only once
-        self.smtp_address = os.environ["EMAIL_PROVIDER_SMTP_ADDRESS"]
-        self.email = os.environ["MY_EMAIL"]
-        self.email_password = os.environ["MY_EMAIL_PASSWORD"]
-        self.twilio_virtual_number = os.environ["TWILIO_VIRTUAL_NUMBER"]
-        self.twilio_verified_number = os.environ["TWILIO_VERIFIED_NUMBER"]
-        self.whatsapp_number = os.environ["TWILIO_WHATSAPP_NUMBER"]
-        # Set up Twilio Client and SMTP connection
-        self.client = Client(os.environ['TWILIO_SID'], os.environ["TWILIO_AUTH_TOKEN"])
-        self.connection = smtplib.SMTP(os.environ["EMAIL_PROVIDER_SMTP_ADDRESS"])
+        """
+        Initializes the Twilio client.
+        """
+        self.client = Client(TWILIO_SID, TWILIO_AUTH_TOKEN)
 
     def send_sms(self, message_body):
         """
-        Sends an SMS message through the Twilio API.
-        This function takes a message body as input and uses the Twilio API to send an SMS from
-        a predefined virtual number (provided by Twilio) to your own "verified" number.
-        It logs the unique SID (Session ID) of the message, which can be used to
-        verify that the message was sent successfully.
-
-        Parameters:
-        message_body (str): The text content of the SMS message to be sent.
-
-        Returns:
-        None
-
-        Notes:
-        - Ensure that `TWILIO_VIRTUAL_NUMBER` and `TWILIO_VERIFIED_NUMBER` are correctly set up in
-        your environment (.env file) and correspond with numbers registered and verified in your
-        Twilio account.
-        - The Twilio client (`self.client`) should be initialized and authenticated with your
-        Twilio account credentials prior to using this function when the Notification Manager gets
-        initialized.
+        Sends an SMS message using the Twilio API.
+        
+        Args:
+            message_body (str): The content of the SMS.
         """
-        message = self.client.messages.create(
-            from_=self.twilio_virtual_number,
-            body=message_body,
-            to=self.twilio_verified_number
-        )
-        # Prints if successfully sent.
-        print(message.sid)
+        try:
+            message = self.client.messages.create(
+                from_=TWILIO_VIRTUAL_NUMBER,
+                body=message_body,
+                to=TWilio_VERIFIED_NUMBER
+            )
+            print(f"SMS sent successfully! SID: {message.sid}")
+        except TwilioRestException as e:
+            print(f"Error sending SMS: {e}")
 
-    # Is SMS not working for you or prefer whatsapp? Connect to the WhatsApp Sandbox!
-    # https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn
     def send_whatsapp(self, message_body):
-        message = self.client.messages.create(
-            from_=f'whatsapp:{self.whatsapp_number}',
-            body=message_body,
-            to=f'whatsapp:{self.twilio_verified_number}'
-        )
-        print(message.sid)
+        """
+        Sends a WhatsApp message using the Twilio API.
+        
+        Args:
+            message_body (str): The content of the WhatsApp message.
+        """
+        try:
+            message = self.client.messages.create(
+                from_=f'whatsapp:{TWILIO_WHATSAPP_NUMBER}',
+                body=message_body,
+                to=f'whatsapp:{TWILIO_VERIFIED_NUMBER}'
+            )
+            print(f"WhatsApp message sent successfully! SID: {message.sid}")
+        except TwilioRestException as e:
+            print(f"Error sending WhatsApp message: {e}")
 
     def send_emails(self, email_list, email_body):
-        with self.connection:
-            self.connection.starttls()
-            self.connection.login(self.email, self.email_password)
-            for email in email_list:
-                self.connection.sendmail(
-                    from_addr=self.email,
-                    to_addrs=email,
-                    msg=f"Subject:New Low Price Flight!\n\n{email_body}".encode('utf-8')
-                )
+        """
+        Sends an email to a list of recipients.
+
+        Args:
+            email_list (list): A list of recipient email addresses.
+            email_body (str): The content of the email body.
+        """
+        try:
+            # Create a secure SMTP connection within a context manager
+            with smtplib.SMTP(SMTP_ADDRESS, port=587) as connection:
+                connection.starttls()  # Secure the connection
+                connection.login(user=MY_EMAIL, password=MY_EMAIL_PASSWORD)
+                for email in email_list:
+                    # Construct the email message with a subject line
+                    message = f"Subject: New Low Price Flight!\n\n{email_body}".encode('utf-8')
+                    connection.sendmail(
+                        from_addr=MY_EMAIL,
+                        to_addrs=email,
+                        msg=message
+                    )
+                    print(f"Email sent successfully to {email}")
+        except smtplib.SMTPException as e:
+            print(f"Error sending emails: {e}")
